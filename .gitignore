@@ -1,0 +1,9 @@
+openspec/
+design-preview/
+docs-private/
+.build/
+.build-app/
+.build-checks/
+build/
+*.bundle
+.DS_Store

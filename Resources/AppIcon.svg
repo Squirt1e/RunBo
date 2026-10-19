@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="ld01-app-title ld01-app-desc">
+  <title id="ld01-app-title">RunBo — 雾蓝杏橙</title>
+  <desc id="ld01-app-desc">雾蓝比钴蓝安静，也比灰色更清爽；蓝灰与云白卡片拉开层次。杏橙只落在光标上，用一处小小的暖色呼应快捷执行，不让整个 Dock 都在喊话。四版里最均衡。</desc>
+  <defs>
+    <linearGradient id="ld01-tile" x1="144" y1="96" x2="904" y2="944" gradientUnits="userSpaceOnUse"><stop stop-color="#D7E2F0"/><stop offset="0.48" stop-color="#C4D5E9"/><stop offset="1" stop-color="#A9BED8"/></linearGradient>
+    <linearGradient id="ld01-tile-rim" x1="256" y1="80" x2="768" y2="944" gradientUnits="userSpaceOnUse"><stop stop-color="#F9FBFF" stop-opacity="0.34"/><stop offset="0.5" stop-color="#F9FBFF" stop-opacity="0.08"/><stop offset="1" stop-color="#788FAE" stop-opacity="0.28"/></linearGradient>
+    <linearGradient id="ld01-back-card" x1="340" y1="232" x2="784" y2="616" gradientUnits="userSpaceOnUse"><stop stop-color="#7191B6"/><stop offset="1" stop-color="#59789D"/></linearGradient>
+    <linearGradient id="ld01-middle-card" x1="284" y1="312" x2="748" y2="696" gradientUnits="userSpaceOnUse"><stop stop-color="#E5EDF5"/><stop offset="1" stop-color="#CEDCEB"/></linearGradient>
+    <linearGradient id="ld01-front-card" x1="248" y1="392" x2="672" y2="776" gradientUnits="userSpaceOnUse"><stop stop-color="#3A4D65"/><stop offset="0.56" stop-color="#283A50"/><stop offset="1" stop-color="#213146"/></linearGradient>
+    <linearGradient id="ld01-front-rim" x1="208" y1="392" x2="728" y2="776" gradientUnits="userSpaceOnUse"><stop stop-color="#B8CADF" stop-opacity="0.4"/><stop offset="1" stop-color="#162436" stop-opacity="0.65"/></linearGradient>
+    <filter id="ld01-tile-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="16" stdDeviation="14" flood-color="#566C89" flood-opacity="0.22"/></filter>
+    <filter id="ld01-card-shadow" x="144" y="176" width="752" height="680" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#334860" flood-opacity="0.26"/></filter>
+  </defs>
+  <rect x="80" y="80" width="864" height="864" rx="190" fill="url(#ld01-tile)" stroke="url(#ld01-tile-rim)" stroke-width="2" filter="url(#ld01-tile-shadow)"/>
+  <rect x="304" y="232" width="520" height="384" rx="52" fill="url(#ld01-back-card)" stroke="#F9FBFF" stroke-opacity="0.28" stroke-width="2" filter="url(#ld01-card-shadow)"/>
+  <rect x="256" y="312" width="520" height="384" rx="52" fill="url(#ld01-middle-card)" stroke="#F9FBFF" stroke-opacity="0.46" stroke-width="2" filter="url(#ld01-card-shadow)"/>
+  <g filter="url(#ld01-card-shadow)">
+    <rect x="208" y="392" width="520" height="384" rx="52" fill="url(#ld01-front-card)" stroke="url(#ld01-front-rim)" stroke-width="2"/>
+    <path d="M374 484 L454 560 L374 636" fill="none" stroke="#F1F5FA" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="506" y="616" width="120" height="40" rx="12" fill="#EEA16E"/>
+  </g>
+</svg>
