@@ -3,8 +3,8 @@ import SwiftUI
 import SwiftTerm
 import PDFKit
 import WebKit
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 @main struct VerifyScrollbars {
     @MainActor static var checks = 0
@@ -60,7 +60,7 @@ import TerminalDeckKit
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for vertical in [true, false] {
                 let parent = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 220))
-                let scroller = DeckScroller(frame: vertical ? NSRect(x: 20, y: 20, width: 12, height: 180)
+                let scroller = Scroller(frame: vertical ? NSRect(x: 20, y: 20, width: 12, height: 180)
                                                            : NSRect(x: 20, y: 20, width: 180, height: 12))
                 parent.addSubview(scroller)
                 let window = mount(parent, size: parent.frame.size)
@@ -121,9 +121,9 @@ import TerminalDeckKit
         scroll.autohidesScrollers = true; scroll.drawsBackground = false
         let document = NSView(frame: NSRect(x: 0, y: 0, width: 1200, height: 1800))
         scroll.documentView = document
-        DeckScroller.install(in: scroll)
+        Scroller.install(in: scroll)
         let window = mount(scroll, size: scroll.frame.size)
-        let v = scroll.verticalScroller as! DeckScroller, h = scroll.horizontalScroller as! DeckScroller
+        let v = scroll.verticalScroller as! Scroller, h = scroll.horizontalScroller as! Scroller
         for style in [NSScroller.Style.legacy, .overlay] {
             scroll.scrollerStyle = style; scroll.tile(); pump()
             scroll.contentView.scroll(to: NSPoint(x: 10, y: 10))
@@ -169,10 +169,10 @@ import TerminalDeckKit
             }
         }
         v.mouseEntered(with: mouse(.mouseMoved, .zero))
-        pump(DeckScrollbarStyle.hideDelay + 0.15)
+        pump(ScrollbarStyle.hideDelay + 0.15)
         try check(v.alphaValue == 1, "hover holds the shared track/thumb visible beyond the hide delay")
         v.mouseExited(with: mouse(.mouseMoved, .zero))
-        pump(DeckScrollbarStyle.hideDelay + 0.15)
+        pump(ScrollbarStyle.hideDelay + 0.15)
         try check(v.alphaValue == 0, "auto-hide works independently of system preference after pointer exit")
         try check(v.hitTest(v.frame.origin) == nil, "hidden scrollbar never swallows content clicks")
         v.reveal()
@@ -184,7 +184,7 @@ import TerminalDeckKit
 
     /// Check the FINAL composited page, not the scroller in isolation. Panel strokes
     /// used to cover one backing-pixel column even after the custom renderer was fixed.
-    @MainActor static func compositedChecks(_ host: NSView, scrollers: [DeckScroller]) throws {
+    @MainActor static func compositedChecks(_ host: NSView, scrollers: [Scroller]) throws {
         try check(host.isFlipped, "page pixel coordinates are top-down")
         for scale in [1, 2] {
             scrollers.forEach { $0.hideNow() }
@@ -217,19 +217,19 @@ import TerminalDeckKit
     }
 
     @MainActor static func appChecks(_ root: URL) throws {
-        let store = try TerminalDeckStore(directory: root.appendingPathComponent("store"))
+        let store = try DataStore(directory: root.appendingPathComponent("store"))
         for i in 0..<60 {
             try store.save(PresetCard(id: "\(i)", title: "Project \(i)", command: "true", workingDirectory: root.path))
             try Data().write(to: root.appendingPathComponent("file-\(i).txt"))
         }
         let model = AppModel(store: store)
-        model.enterWorkhorseMode(); model.dismissNotice()
+        model.enterSplitMode(); model.dismissNotice()
         model.page = .detail(OwnerKey(kind: .preset, ownerId: "0"))
         model.fileBrowser.togglePinned()
         if !model.fileBrowser.isVisible { model.fileBrowser.toggle() }
-        let host = NSHostingView(rootView: DeckRootView(model: model))
+        let host = NSHostingView(rootView: RootView(model: model))
         let window = mount(host, size: NSSize(width: 1100, height: 860))
-        try wait("sidebar and file tree install their own scrollers") { descendants(host, DeckScroller.self).count >= 2 }
+        try wait("sidebar and file tree install their own scrollers") { descendants(host, Scroller.self).count >= 2 }
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             window.appearance = NSAppearance(named: appearance)
             for collapsed in [false, true] {
@@ -239,12 +239,12 @@ import TerminalDeckKit
                 let scrolls = descendants(host, NSScrollView.self).filter { $0.hasVerticalScroller }
                 try check(scrolls.count >= 2, "fixture includes both expanded sidebar and file tree")
                 for scroll in scrolls {
-                    try check(scroll.verticalScroller is DeckScroller, "every visible app scroll area has the shared implementation")
-                    let s = scroll.verticalScroller as! DeckScroller
+                    try check(scroll.verticalScroller is Scroller, "every visible app scroll area has the shared implementation")
+                    let s = scroll.verticalScroller as! Scroller
                     s.reveal()
                     try check(s.frame.width == 8 && s.rect(for: .knob).width == 4, "sidebar/file tree never regress to native wide scrollers")
                 }
-                let scrollers = scrolls.compactMap { $0.verticalScroller as? DeckScroller }
+                let scrollers = scrolls.compactMap { $0.verticalScroller as? Scroller }
                 for position in [0.0, 0.5, 1.0] {
                     for scroll in scrolls {
                         guard let document = scroll.documentView else { continue }
@@ -262,16 +262,16 @@ import TerminalDeckKit
         model.page = .settings; pump(0.3)
         try wait("settings page survives SwiftUI remounting with the shared style") {
             host.layoutSubtreeIfNeeded()
-            return descendants(host, NSScrollView.self).filter { $0.hasVerticalScroller }.allSatisfy { $0.verticalScroller is DeckScroller }
+            return descendants(host, NSScrollView.self).filter { $0.hasVerticalScroller }.allSatisfy { $0.verticalScroller is Scroller }
         }
         let textHost = NSHostingView(rootView: ReadOnlyFileText(text: String(repeating: String(repeating: "x", count: 200) + "\n", count: 100)))
         _ = mount(textHost)
-        try check(descendants(textHost, DeckScroller.self).count == 2, "text previews share vertical and horizontal scrollers")
+        try check(descendants(textHost, Scroller.self).count == 2, "text previews share vertical and horizontal scrollers")
         let editorHost = NSHostingView(rootView: ShellTextEditor(text: .constant(String(repeating: "command\n", count: 100)), textColor: .labelColor, placeholder: ""))
         _ = mount(editorHost)
-        try check(descendants(editorHost, DeckScroller.self).count == 1, "command editor uses the shared implementation")
+        try check(descendants(editorHost, Scroller.self).count == 1, "command editor uses the shared implementation")
         let image = ZoomableImagePreview(); _ = mount(image, size: NSSize(width: 800, height: 600))
-        try check(image.verticalScroller is DeckScroller && image.horizontalScroller is DeckScroller, "image preview styles both axes")
+        try check(image.verticalScroller is Scroller && image.horizontalScroller is Scroller, "image preview styles both axes")
         let imageBitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1000, pixelsHigh: 800,
                                           bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                           colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -287,11 +287,11 @@ import TerminalDeckKit
                   "fitted-to-overflow zoom never shifts the pointer anchor as scrollbars become enabled")
         image.zoom(by: 0.5, at: anchor)
         try check(image.contentView.frame == clipBefore, "zooming back to fit never removes gutters or shifts the viewport")
-        let pdf = DeckPDFView(); pdf.displayMode = .singlePageContinuous
+        let pdf = PDFPreviewView(); pdf.displayMode = .singlePageContinuous
         let data = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 1200)).dataWithPDF(inside: NSRect(x: 0, y: 0, width: 800, height: 1200))
         pdf.document = PDFDocument(data: data); _ = mount(pdf); pdf.layoutSubtreeIfNeeded()
         let pdfScrolls = descendants(pdf, NSScrollView.self)
-        try check(!pdfScrolls.isEmpty && pdfScrolls.allSatisfy { !$0.hasVerticalScroller || $0.verticalScroller is DeckScroller }, "PDFKit's internal scroll views use the shared style")
+        try check(!pdfScrolls.isEmpty && pdfScrolls.allSatisfy { !$0.hasVerticalScroller || $0.verticalScroller is Scroller }, "PDFKit's internal scroll views use the shared style")
         let terminal = TerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 300))
         let container = TerminalScrollContainer(terminal: terminal); _ = mount(container)
         terminal.feed(text: String(repeating: "scrollback\r\n", count: 200))

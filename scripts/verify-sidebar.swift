@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 @main struct VerifySidebar {
     @MainActor static var count = 0
@@ -22,7 +22,7 @@ import TerminalDeckKit
         try check(condition(), label)
     }
     @MainActor static func fixture(_ root: URL) throws -> AppModel {
-        let store = try TerminalDeckStore(directory: root)
+        let store = try DataStore(directory: root)
         let tag = CardTag(id: "pi", name: "Pi")
         try store.save(tag)
         for (id, title) in [("a", "Terminal Dashboard"), ("b", "Agents Usage"), ("c", "Learning Agent")] {
@@ -36,14 +36,14 @@ import TerminalDeckKit
         let model = try fixture(root)
         let sidebar = model.sidebar
         try check(sidebar.mode == .pinned && !sidebar.peeking, "existing data defaults to pinned without a new settings write")
-        try check(try model.store.string(forKey: WorkbenchSidebarMode.key) == nil, "startup does not invent a persisted preference")
-        let ratio = model.workhorseSidebarRatio
+        try check(try model.store.string(forKey: SidebarMode.key) == nil, "startup does not invent a persisted preference")
+        let ratio = model.splitSidebarRatio
         try check(sidebar.setMode(.collapsed), "explicit collapse succeeds")
-        try check(try model.store.string(forKey: WorkbenchSidebarMode.key) == "collapsed", "only the layout preference is persisted")
-        let reopened = AppModel(store: try TerminalDeckStore(directory: root))
+        try check(try model.store.string(forKey: SidebarMode.key) == "collapsed", "only the layout preference is persisted")
+        let reopened = AppModel(store: try DataStore(directory: root))
         try check(reopened.sidebar.mode == .collapsed && !reopened.sidebar.peeking, "reopening restores the rail, never a transient peek")
-        model.enterWorkhorseMode(); model.exitWorkhorseMode()
-        try check(sidebar.mode == .collapsed && model.workhorseSidebarRatio == ratio, "work mode changes preserve fold preference and expanded ratio")
+        model.enterSplitMode(); model.exitSplitMode()
+        try check(sidebar.mode == .collapsed && model.splitSidebarRatio == ratio, "work mode changes preserve fold preference and expanded ratio")
         sidebar.pointerChanged(true); pump(0.06); sidebar.pointerChanged(false); pump(0.3)
         try check(!sidebar.peeking, "a brief pointer crossing never reveals the panel")
         sidebar.pointerChanged(true); pump(0.23)
@@ -58,7 +58,7 @@ import TerminalDeckKit
         try check(sidebar.peeking && sidebar.inputSource == .keyboard, "keyboard reveal is immediate and carries a focus transfer")
         try check(sidebar.consumeEscape() && !sidebar.peeking, "sidebar Escape closes only its own keyboard peek")
         sidebar.pointerChanged(true); pump(0.23)
-        model.beginRename(OwnerKey(kind: .preset, ownerId: "a"), source: .workhorseList)
+        model.beginRename(OwnerKey(kind: .preset, ownerId: "a"), source: .splitList)
         sidebar.pointerChanged(false); pump(0.35)
         try check(sidebar.peeking && model.renamingKey != nil, "automatic close never interrupts rename")
         try check(sidebar.setMode(.pinned) && sidebar.mode == .pinned, "pinning is safe while rename is active")
@@ -85,7 +85,7 @@ import TerminalDeckKit
         let key = OwnerKey(kind: .preset, ownerId: "a")
         model.page = .detail(key)
         var frames: [String: CGRect] = [:]
-        let host = NSHostingView(rootView: DeckRootView(model: model).onPreferenceChange(WorkbenchControlFrameKey.self) { frames = $0 })
+        let host = NSHostingView(rootView: RootView(model: model).onPreferenceChange(ControlFrameKey.self) { frames = $0 })
         let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: 1100, height: 860), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         window.title = "RunBo — isolated sidebar checks"
@@ -127,9 +127,9 @@ import TerminalDeckKit
         var resizes = 0
         let originalResize = scene.onResize
         scene.onResize = { cols, rows in resizes += 1; originalResize?(cols, rows) }
-        for workhorse in [false, true] {
-            if workhorse { model.enterWorkhorseMode() } else { model.exitWorkhorseMode() }
-            let name = workhorse ? "workhorse" : "standard"
+        for splitMode in [false, true] {
+            if splitMode { model.enterSplitMode() } else { model.exitSplitMode() }
+            let name = splitMode ? "split" : "standard"
             model.page = .detail(key); model.dismissNotice(); pump(0.4)
             _ = model.sidebar.setMode(.pinned); pump(0.3)
             try press("sidebar-toggle")
@@ -146,7 +146,7 @@ import TerminalDeckKit
             try check(resizes == 0 && scene.container.superview === parent, "\(name): hover neither remounts TerminalView nor sends PTY resize")
             try check(window.firstResponder === scene.view, "\(name): hover does not steal terminal focus")
             try snapshot(name + "-peek-light")
-            _ = model.consumeDeckEscape(terminalHasFocus: true)
+            _ = model.consumeAppEscape(terminalHasFocus: true)
             try check(model.sidebar.peeking, "\(name): terminal Escape does not close the hovered sidebar")
             mouse(CGPoint(x: 1000, y: 600)); pump(0.45)
             try check(!model.sidebar.peeking && frames["workbench-content"] == content && resizes == 0, "\(name): leaving the overlay closes without resizing")
@@ -168,9 +168,9 @@ import TerminalDeckKit
                 keyEvent(48, "\t")
             }
             try check(model.sidebar.peeking && model.sidebar.keyboardInside, "\(name): Tab opens accessible full labels instead of hidden focus stops")
-            if !workhorse { keyEvent(53, "\u{1b}"); pump(0.2) }
+            if !splitMode { keyEvent(53, "\u{1b}"); pump(0.2) }
             else {
-                model.beginRename(key, source: .workhorseList); pump(0.2)
+                model.beginRename(key, source: .splitList); pump(0.2)
                 mouse(CGPoint(x: 1000, y: 600)); pump(0.4)
                 try check(model.sidebar.peeking && model.renamingKey == key, "native rename field is not unmounted by pointer exit")
                 model.cancelRename(); model.sidebar.keyboardFocusChanged(false); pump(0.4)
@@ -185,12 +185,12 @@ import TerminalDeckKit
         try check(!model.sidebar.peeking, "mouse project selection does not leave a stale keyboard focus hold")
         model.page = .detail(key); pump(0.2)
         model.fileBrowser.togglePinned(); model.fileBrowser.toggle(source: .keyboard)
-        let fileWidth = model.fileBrowser.panelWidth, ratio = model.workhorseSidebarRatio
+        let fileWidth = model.fileBrowser.panelWidth, ratio = model.splitSidebarRatio
         _ = model.sidebar.setMode(.pinned); _ = model.sidebar.setMode(.collapsed)
-        try check(model.fileBrowser.isPinned && model.fileBrowser.panelWidth == fileWidth && model.workhorseSidebarRatio == ratio,
+        try check(model.fileBrowser.isPinned && model.fileBrowser.panelWidth == fileWidth && model.splitSidebarRatio == ratio,
                   "file pin, file width and expanded sidebar ratio remain independent")
         model.beginEditCard(model.card(for: "b")!); model.editorTitle = "Unsaved sidebar draft"
-        model.sidebar.focus(.owner(key)); model.workhorseSelect(key)
+        model.sidebar.focus(.owner(key)); model.selectSplitItem(key)
         try check(model.page == .editor && model.alert != nil && model.editorTitle == "Unsaved sidebar draft", "rail navigation retains existing dirty-draft protection")
         model.alert = nil; model.cancelEditor(); model.sidebar.windowInactive()
         for width in [950.0, 1100.0, 1800.0] {
@@ -200,7 +200,7 @@ import TerminalDeckKit
         }
         window.appearance = NSAppearance(named: .darkAqua)
         model.sidebar.pointerChanged(true); pump(0.5)
-        try snapshot("workhorse-peek-dark")
+        try snapshot("split-peek-dark")
     }
 
     @MainActor static func main() {

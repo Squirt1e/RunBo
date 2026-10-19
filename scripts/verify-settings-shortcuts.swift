@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 @main
 struct VerifySettingsShortcuts {
@@ -36,10 +36,10 @@ struct VerifySettingsShortcuts {
         pump()
     }
 
-    @MainActor static func verify(workhorse: Bool, sidebarWidth: Double = 198) throws {
+    @MainActor static func verify(splitMode: Bool, sidebarWidth: Double = 198) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("settings-shortcut-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = try TerminalDeckStore(directory: root)
+        let store = try DataStore(directory: root)
         let card = PresetCard(id: "card", title: "Keep card", command: "true")
         let temp = TempTerminal(id: "temp", title: "Keep terminal")
         try store.save(card)
@@ -55,18 +55,18 @@ struct VerifySettingsShortcuts {
         let liveEvent = SessionEvent(sessionId: "live", sequence: 0, timestamp: Date(timeIntervalSince1970: 1_800_000_000),
                                      kind: .output, data: Data("running".utf8))
         try store.append([liveEvent])
-        if workhorse {
-            model.enterWorkhorseMode()
-            model.setWorkhorseSidebarRatio(sidebarWidth / 1100, persist: false)
+        if splitMode {
+            model.enterSplitMode()
+            model.setSidebarRatio(sidebarWidth / 1100, persist: false)
         }
         model.beginEditCard(card)
         model.editorTitle = "Unsaved draft"
         model.loadHistoryEntries(for: OwnerKey(kind: .preset, ownerId: card.id))
         let before = try store.historyUsage().eventBytes
         let keptCards = try store.cards(), keptTemps = try store.temps()
-        let view = workhorse ? AnyView(WorkhorseRootView(model: model)) : AnyView(DeckSidebar(model: model))
+        let view = splitMode ? AnyView(SplitRootView(model: model)) : AnyView(AppSidebar(model: model))
         let host = NSHostingView(rootView: view)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: workhorse ? 1100 : 198, height: 700),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: splitMode ? 1100 : 198, height: 700),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
@@ -75,10 +75,10 @@ struct VerifySettingsShortcuts {
         defer { window.orderOut(nil); window.contentView = nil }
         pump()
         host.layoutSubtreeIfNeeded()
-        let mode = workhorse ? "workhorse \(Int(sidebarWidth))pt" : "card"
+        let mode = splitMode ? "split \(Int(sidebarWidth))pt" : "card"
         try check(NSApp.isActive && window.isKeyWindow, "\(mode): isolated window received native input focus")
         // Window coordinates are bottom-up; the action occupies the trailing 30×28pt of the footer.
-        let shortcut = CGPoint(x: workhorse ? sidebarWidth - 33 : 169, y: workhorse ? 27 : 29)
+        let shortcut = CGPoint(x: splitMode ? sidebarWidth - 33 : 169, y: splitMode ? 27 : 29)
         click(shortcut, in: window)
         try check(model.alert?.destructive == true && model.page == .editor && model.editorTitle == "Unsaved draft",
                   "\(mode): shortcut requests confirmation without navigating or discarding the draft")
@@ -108,8 +108,8 @@ struct VerifySettingsShortcuts {
         NSApp.setActivationPolicy(.accessory)
         NSApp.finishLaunching()
         do {
-            try verify(workhorse: false)
-            for width in [240.0, 296.0, 460.0] { try verify(workhorse: true, sidebarWidth: width) }
+            try verify(splitMode: false)
+            for width in [240.0, 296.0, 460.0] { try verify(splitMode: true, sidebarWidth: width) }
             print("ALL SETTINGS SHORTCUT CHECKS PASSED")
         } catch {
             print("FAIL \(error)")

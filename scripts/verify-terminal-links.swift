@@ -1,7 +1,7 @@
 import AppKit
 import SwiftTerm
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 @main
 struct VerifyTerminalLinks {
@@ -207,7 +207,7 @@ struct VerifyTerminalLinks {
     }
 
     @MainActor static func modelAndArchive(_ root: URL) throws {
-        let store = try TerminalDeckStore(directory: root.appendingPathComponent("store"))
+        let store = try DataStore(directory: root.appendingPathComponent("store"))
         let card = PresetCard(id: "card", title: "fixture", command: "true", workingDirectory: "/wrong/configuration")
         try store.save(card)
         try store.save(SessionRecord(id: "saved", kind: .preset, ownerId: card.id, title: "saved", shell: "/bin/zsh",

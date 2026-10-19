@@ -6,11 +6,11 @@ this repository.
 The following assets are **not** licensed under the MIT License and remain
 all rights reserved:
 
-- App icons and menu bar icons, including `Resources/AppIcon.*`,
-  `Resources/MenuBarIcon.*`, and the PNG files under
-  `Sources/TerminalDeck/Resources/`.
-- The hand-drawn ox illustration (`WorkhorseOx.png`).
-- Screenshots and images under `assets/`.
+- App icons and menu bar icons, including `resources/AppIcon.*`,
+  `resources/MenuBarIcon.*`, and the PNG files under
+  `src/app/Assets/`.
+- The hand-drawn ox illustration (`OxMark.png`).
+- Screenshots and images under `screenshots/`.
 - The RunBo name, logo, and other brand assets.
 
 You may use these assets as part of building and running this repository for

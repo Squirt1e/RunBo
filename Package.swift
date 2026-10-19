@@ -2,37 +2,36 @@
 import PackageDescription
 
 let package = Package(
-    name: "TerminalDeck",
+    name: "RunBo",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "RunBo", targets: ["TerminalDeck"]),
-        .executable(name: "runbo-checks", targets: ["TerminalDeckChecks"]),
-        .library(name: "TerminalDeckKit", targets: ["TerminalDeckKit"]),
+        .executable(name: "RunBo", targets: ["App"]),
+        .executable(name: "runbo-checks", targets: ["Checks"]),
     ],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.20.0")
     ],
     targets: [
         .target(
-            name: "TerminalDeckKit",
-            path: "Sources/TerminalDeckKit",
+            name: "Core",
+            path: "src/core",
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .executableTarget(
-            name: "TerminalDeck",
+            name: "App",
             dependencies: [
-                "TerminalDeckKit",
+                "Core",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
-            path: "Sources/TerminalDeck",
-            resources: [.process("Resources")],
+            path: "src/app",
+            resources: [.process("Assets")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "TerminalDeckChecks",
-            dependencies: ["TerminalDeckKit"],
-            path: "Sources/TerminalDeckChecks",
+            name: "Checks",
+            dependencies: ["Core"],
+            path: "src/checks",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

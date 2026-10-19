@@ -14,10 +14,6 @@ let fm = FileManager.default
 let appURL = URL(fileURLWithPath: CommandLine.arguments[2]).standardizedFileURL
 let stagedURL = URL(fileURLWithPath: CommandLine.arguments[3]).standardizedFileURL
 let resultURL = URL(fileURLWithPath: CommandLine.arguments[4])
-let bundleID = "com.runbo.app"
-// Packages built before the rename still carry the old identifier; the in-app rebuild task
-// must be able to replace and quit them once, otherwise the first handoff would be refused.
-let legacyBundleIDs: Set<String> = ["com.terminaldeck.app"]
 
 func record(_ state: String, _ extra: [String: Any] = [:]) {
     var result: [String: Any] = ["state": state, "app": appURL.path, "stagedApp": stagedURL.path,
@@ -35,12 +31,27 @@ func fail(_ message: String) -> Never {
     record("failed", ["error": message])
     exit(1)
 }
-func isRunBoBundle(_ bundle: Bundle?) -> Bool {
+
+guard let stagedBundle = Bundle(url: stagedURL),
+      let bundleID = stagedBundle.bundleIdentifier,
+      let executableName = stagedBundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String,
+      !executableName.isEmpty else {
+    fail("Staged package is missing its bundle identity")
+}
+let displayName = (stagedBundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+    ?? (stagedBundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+    ?? stagedURL.deletingPathExtension().lastPathComponent
+// Packages built before the project rename still carry the old identifier; the
+// in-app rebuild task must be able to replace and quit them once.
+let legacyBundleIDs: Set<String> = ["com.terminaldeck.app"]
+let identityBundleIDs = Set([bundleID]).union(legacyBundleIDs)
+
+func isExpectedBundle(_ bundle: Bundle?) -> Bool {
     guard let identifier = bundle?.bundleIdentifier else { return false }
-    return identifier == bundleID || legacyBundleIDs.contains(identifier)
+    return identityBundleIDs.contains(identifier)
 }
 func runningApps() -> [NSRunningApplication] {
-    ([bundleID] + legacyBundleIDs)
+    identityBundleIDs
         .flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
         .filter { !$0.isTerminated }
 }
@@ -50,13 +61,14 @@ guard appURL != stagedURL, appURL.pathExtension == "app", stagedURL.pathExtensio
       !appURL.path.hasPrefix(stagedURL.path + "/"), !stagedURL.path.hasPrefix(appURL.path + "/") else {
     fail("Target and staged packages must be separate app bundles")
 }
-guard let bundle = Bundle(url: stagedURL), bundle.bundleIdentifier == bundleID,
-      bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == "RunBo",
-      fm.isExecutableFile(atPath: stagedURL.appendingPathComponent("Contents/MacOS/RunBo").path),
-      fm.fileExists(atPath: stagedURL.appendingPathComponent("Contents/Resources/TerminalDeck_TerminalDeck.bundle").path)
-else { fail("Staged RunBo package is incomplete or has the wrong identity") }
-if fm.fileExists(atPath: appURL.path), !isRunBoBundle(Bundle(url: appURL)) {
-    fail("Refusing to replace a target that is not RunBo")
+let stagedResources = stagedURL.appendingPathComponent("Contents/Resources")
+let resourceBundles = (try? fm.contentsOfDirectory(at: stagedResources, includingPropertiesForKeys: nil)) ?? []
+guard fm.isExecutableFile(atPath: stagedURL.appendingPathComponent("Contents/MacOS/\(executableName)").path),
+      resourceBundles.contains(where: { $0.pathExtension == "bundle" }) else {
+    fail("Staged \(displayName) package is incomplete")
+}
+if fm.fileExists(atPath: appURL.path), !isExpectedBundle(Bundle(url: appURL)) {
+    fail("Refusing to replace a target that is not \(displayName)")
 }
 guard fm.isWritableFile(atPath: appURL.deletingLastPathComponent().path) else {
     fail("Target directory is not writable")
@@ -70,22 +82,22 @@ guard verifier.terminationStatus == 0 else { fail("Staged package signature veri
 
 if checkOnly {
     let apps = runningApps()
-    guard apps.count <= 1 else { fail("Multiple RunBo instances are open; close the extra instances before restarting") }
+    guard apps.count <= 1 else { fail("Multiple \(displayName) instances are open; close the extra instances before restarting") }
     record("validated", ["runningPIDs": apps.map(\.processIdentifier), "willRestart": false])
     exit(0)
 }
 
 // The OS releases this advisory lock even if a worker crashes; no stale PID files.
-let lockURL = appURL.deletingLastPathComponent().appendingPathComponent(".runbo-restart.lock")
+let lockURL = appURL.deletingLastPathComponent().appendingPathComponent(".restart.lock")
 let lock = Darwin.open(lockURL.path, O_CREAT | O_RDWR, mode_t(0o600))
 guard lock >= 0 else { fail("Cannot open restart lock") }
-guard flock(lock, LOCK_EX | LOCK_NB) == 0 else { fail("Another RunBo restart is already in progress") }
+guard flock(lock, LOCK_EX | LOCK_NB) == 0 else { fail("Another \(displayName) restart is already in progress") }
 
 record("scheduled", ["delaySeconds": 2, "processGroup": getpgrp()])
 // Let the invoking task report successful handoff before its own PTY is ended.
 Thread.sleep(forTimeInterval: 2)
 let apps = runningApps()
-guard apps.count <= 1 else { fail("Multiple RunBo instances appeared; refusing an ambiguous restart") }
+guard apps.count <= 1 else { fail("Multiple \(displayName) instances appeared; refusing an ambiguous restart") }
 if let old = apps.first {
     record("quitting", ["oldPID": old.processIdentifier, "oldApp": old.bundleURL?.path ?? ""])
     // Unlike SIGTERM, this invokes applicationShouldTerminate and its PTY/history cleanup.
@@ -94,9 +106,10 @@ if let old = apps.first {
     while !old.isTerminated && Date() < deadline { pump() }
     guard old.isTerminated else { fail("App did not exit normally; refusing replacement or a second instance") }
 }
-guard runningApps().isEmpty else { fail("Another RunBo instance appeared; refusing package replacement") }
+guard runningApps().isEmpty else { fail("Another \(displayName) instance appeared; refusing package replacement") }
 
-let backupURL = stagedURL.deletingLastPathComponent().appendingPathComponent("RunBo.previous.app")
+let backupName = stagedURL.deletingPathExtension().lastPathComponent + ".previous.app"
+let backupURL = stagedURL.deletingLastPathComponent().appendingPathComponent(backupName)
 guard !fm.fileExists(atPath: backupURL.path) else { fail("Backup path already exists; refusing to overwrite it") }
 let hadPreviousPackage = fm.fileExists(atPath: appURL.path)
 do {
@@ -112,7 +125,7 @@ do {
 } catch { fail("Package replacement failed: \(error)") }
 record("packaged", ["backupApp": hadPreviousPackage ? backupURL.path : ""])
 
-guard runningApps().isEmpty else { fail("Another RunBo instance appeared; refusing a second launch") }
+guard runningApps().isEmpty else { fail("Another \(displayName) instance appeared; refusing a second launch") }
 let opener = Process()
 opener.executableURL = URL(fileURLWithPath: "/usr/bin/open")
 opener.arguments = ["-n", appURL.path]

@@ -1,8 +1,8 @@
 import AppKit
 import QuartzCore
 import SwiftUI
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 /// Never orders a window on screen, activates this process, or sends/posts an input event.
 @main struct VerifySidebarRail {
@@ -28,7 +28,7 @@ import TerminalDeckKit
         return (window, host)
     }
     @MainActor static func fixture(_ root: URL) throws -> AppModel {
-        let store = try TerminalDeckStore(directory: root)
+        let store = try DataStore(directory: root)
         for (index, name) in ["Pi", "Clash", "Scripts 很长的分组名称 🚀", "Empty"].enumerated() {
             try store.save(CardTag(id: "tag-\(index)", name: name, sortOrder: index))
         }
@@ -42,7 +42,7 @@ import TerminalDeckKit
         try store.save(TempTerminal(id: "terminal", title: "终端 12"))
         let model = AppModel(store: store)
         model.engine.baseEnvironment = ["HOME": root.path, "PATH": "/usr/bin:/bin", "TERM": "xterm-256color"]
-        model.enterWorkhorseMode()
+        model.enterSplitMode()
         _ = model.sidebar.setMode(.collapsed, source: .keyboard)
         return model
     }
@@ -64,8 +64,8 @@ import TerminalDeckKit
         try check(model.sidebarRailTerminals.isEmpty && !model.sidebarRailPresetGroups.isEmpty, "terminal menu collapse is independent from command groups")
         model.activateSidebarNode(.menu(.temp))
         let key = OwnerKey(kind: .preset, ownerId: "fa")
-        model.workhorseSelect(key)
-        try check(model.workhorseSelection == key && model.liveRuntime(key) == nil, "selecting a rail owner opens detail without executing a command")
+        model.selectSplitItem(key)
+        try check(model.splitSelection == key && model.liveRuntime(key) == nil, "selecting a rail owner opens detail without executing a command")
     }
 
     @MainActor static func layerChecks() throws {
@@ -109,7 +109,7 @@ import TerminalDeckKit
         try data.write(to: directory.appendingPathComponent(name + ".png"))
         if name == "rail-light" || name == "rail-dark" {
             let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
-            let rect = CGRect(x: 0, y: 0, width: WorkbenchSidebarLayout.railWidth * scale, height: CGFloat(bitmap.pixelsHigh))
+            let rect = CGRect(x: 0, y: 0, width: SidebarLayout.railWidth * scale, height: CGFloat(bitmap.pixelsHigh))
             if let image = bitmap.cgImage?.cropping(to: rect),
                let crop = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
                 try crop.write(to: directory.appendingPathComponent(name + "-detail.png"))
@@ -169,14 +169,14 @@ import TerminalDeckKit
         for dark in [false, true] {
             for reduceMotion in [false, true] {
                 let study = VStack(spacing: 16) {
-                    ForEach(WorkhorseStatusDot.allCases, id: \.self) { kind in
+                    ForEach(StatusDot.allCases, id: \.self) { kind in
                         HStack(spacing: 20) {
                             SidebarRailTile(monogram: "AB", kind: kind, reduceMotionOverride: reduceMotion)
                             Text(kind.rawValue).font(.system(size: 12, design: .monospaced))
                         }.frame(width: 280, alignment: .leading)
                     }
                 }
-                .padding(24).frame(width: 340, height: 390).background(DeckTheme.background)
+                .padding(24).frame(width: 340, height: 390).background(Theme.background)
                 .environment(\.colorScheme, dark ? .dark : .light)
                 let (window, host) = hiddenWindow(study, size: CGSize(width: 340, height: 390))
                 window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -202,7 +202,7 @@ import TerminalDeckKit
         let scene = model.liveScene(sessionId: session)
         model.page = .detail(key)
         var frames: [String: CGRect] = [:]
-        let root = DeckRootView(model: model).onPreferenceChange(WorkbenchControlFrameKey.self) { frames = $0 }
+        let root = RootView(model: model).onPreferenceChange(ControlFrameKey.self) { frames = $0 }
             .transaction { $0.disablesAnimations = true }
         let (window, host) = hiddenWindow(root, size: CGSize(width: 1100, height: 860))
         window.appearance = NSAppearance(named: .aqua)
@@ -262,8 +262,8 @@ import TerminalDeckKit
         window.setContentSize(CGSize(width: 1100, height: 860)); host.layoutSubtreeIfNeeded(); pump(0.2)
         try check(runningLight.visibleRect.intersects(runningLight.bounds), "scrolling back restores the tile's visibility without remounting it")
         try check(model.liveRuntime(key)?.sessionId == session, "grouping and status animation never replace the running session")
-        model.exitWorkhorseMode(); pump(0.25)
-        try check(frames["rail-owner-td"] == nil && frames["rail-sidebar-menu-preset"] != nil, "card mode retains menu-only rail, not workhorse owners")
+        model.exitSplitMode(); pump(0.25)
+        try check(frames["rail-owner-td"] == nil && frames["rail-sidebar-menu-preset"] != nil, "card mode retains menu-only rail, not split owners")
         try check(!window.isVisible && !NSApp.isActive, "all layout and real PTY checks finish without showing a window")
     }
 

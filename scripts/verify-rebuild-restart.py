@@ -14,14 +14,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class AppIdentityChecks(unittest.TestCase):
-    def test_runbo_identity_and_package_name(self):
-        with (ROOT / "Resources/Info.plist").open("rb") as source:
+    def test_identity_plist_is_complete(self):
+        with (ROOT / "config/Info.plist").open("rb") as source:
             info = plistlib.load(source)
-        self.assertEqual(info["CFBundleName"], "RunBo")
-        self.assertEqual(info["CFBundleDisplayName"], "RunBo")
-        self.assertEqual(info["NSHumanReadableCopyright"], "RunBo")
-        self.assertEqual(info["CFBundleIdentifier"], "com.runbo.app")
-        self.assertEqual(info["CFBundleExecutable"], "RunBo")
+        self.assertTrue(info["CFBundleName"])
+        self.assertTrue(info["CFBundleDisplayName"])
+        self.assertTrue(info["CFBundleExecutable"])
+        self.assertTrue(info["CFBundleIdentifier"])
 
 
 class RebuildRestartChecks(unittest.TestCase):
@@ -32,7 +31,13 @@ class RebuildRestartChecks(unittest.TestCase):
         scripts.mkdir(parents=True)
         for name in ("rebuild-and-restart.sh", "restart-built-app.swift"):
             shutil.copy2(ROOT / "scripts" / name, scripts / name)
-        self.original = self.root / "build/RunBo.app/original"
+        config = self.root / "config"
+        config.mkdir(parents=True)
+        shutil.copy2(ROOT / "config/Info.plist", config / "Info.plist")
+        with (ROOT / "config/Info.plist").open("rb") as source:
+            self.info = plistlib.load(source)
+        self.app_name = self.info["CFBundleName"]
+        self.original = self.root / f"build/{self.app_name}.app/original"
         self.original.parent.mkdir(parents=True)
         self.original.write_text("running-package")
         self.trace = self.root / "trace"
@@ -92,7 +97,7 @@ if [ "${TEST_FAIL:-}" = build ]; then exit 9; fi
         self.assertEqual(self.events(), ["compile", "build:debug", "check:--check"])
         self.assertFalse(self.submit.exists())
         self.assertIn("no App was quit, replaced or launched", result.stdout)
-        stages = list((self.root / "build").glob(".runbo-rebuild.*/RunBo.app/new"))
+        stages = list((self.root / "build").glob(f".rebuild.*/{self.app_name}.app/new"))
         self.assertEqual(len(stages), 1)
 
     def test_success_only_hands_off_after_build_and_preflight(self):
@@ -104,7 +109,7 @@ if [ "${TEST_FAIL:-}" = build ]; then exit 9; fi
         self.assertIn("/bin/sh", arguments)
         self.assertIn("--restart", arguments[arguments.index("-c") + 1])
         self.assertIn(str(self.original.parent), arguments)
-        self.assertTrue(any(".runbo-rebuild." in arg and arg.endswith("/RunBo.app") for arg in arguments))
+        self.assertTrue(any(".rebuild." in arg and arg.endswith(f"/{self.app_name}.app") for arg in arguments))
         self.assertIn("Restart scheduled", result.stdout)
 
     def test_release_configuration(self):
@@ -121,7 +126,7 @@ if [ "${TEST_FAIL:-}" = build ]; then exit 9; fi
         result = self.run_script(failure=failure)
         self.assertEqual(result.returncode, code, result.stderr)
         self.assertEqual(self.events(), expected_events)
-        self.assertEqual(list((self.root / "build").glob(".runbo-rebuild.*")), [])
+        self.assertEqual(list((self.root / "build").glob(".rebuild.*")), [])
 
     def test_compiler_failure_never_builds_or_submits(self):
         self.assert_failed_safely("compile", 8, ["compile"])

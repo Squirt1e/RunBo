@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 /// App-model and native-layout smoke checks. Uses only temporary stores and a scratch HOME.
 @main
@@ -18,9 +18,9 @@ struct VerifyCardCopies {
         while !predicate(), Date() < deadline { pump(0.03) }
         try check(predicate(), label)
     }
-    @MainActor static func scratch(_ name: String) throws -> (TerminalDeckStore, URL) {
+    @MainActor static func scratch(_ name: String) throws -> (DataStore, URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("card-copy-\(name)-\(UUID())")
-        return (try TerminalDeckStore(directory: root), root)
+        return (try DataStore(directory: root), root)
     }
     @MainActor static func isolate(_ model: AppModel, root: URL) {
         model.engine.baseEnvironment = ["HOME": root.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "TERM": "xterm-256color"]
@@ -71,9 +71,9 @@ struct VerifyCardCopies {
         let terminalID = model.liveRuntime(terminal)!.sessionId
         let doomedSession = model.liveRuntime(disposable)!.sessionId
         try check(model.copyOnlineCount == 2, "global warning counts copy PTYs but excludes ordinary terminals")
-        model.enterWorkhorseMode()
-        model.toggleWorkhorseMenu(.preset)
-        model.toggleWorkhorseMenu(.temp)
+        model.enterSplitMode()
+        model.toggleSidebarMenu(.preset)
+        model.toggleSidebarMenu(.temp)
         model.page = .settings
         try check(model.copyKeys.count == 2, "hidden groups/settings do not change global scope")
         model.beginEditCard(model.card(for: disposable.ownerId)!)
@@ -97,7 +97,7 @@ struct VerifyCardCopies {
         try check(model.liveRuntime(terminal)?.sessionId == terminalID, "global cleanup leaves ordinary terminal unchanged")
         try check(model.liveRuntime(source)?.sessionId == originalID, "global cleanup leaves original PTY unchanged")
         try check(model.liveRuntime(kept)?.sessionId == keptID, "global cleanup leaves retained PTY unchanged")
-        try check(model.page == .presets && model.workhorseSelection == nil, "removing selected copy returns workhorse home")
+        try check(model.page == .presets && model.splitSelection == nil, "removing selected copy returns split-mode home")
         try check(try store.events(sessionId: doomedSession).isEmpty, "removed output is not resurrected")
         model.removeCopy(kept)
         try check(model.card(for: kept.ownerId) != nil, "ordinary retained card cannot be dismissed as a copy")
@@ -125,7 +125,7 @@ struct VerifyCardCopies {
         model.createCopy(source)
         let stale = model.copyKeys.first!
         model.engine.endAllSessions(timeout: 1)
-        let reopened = AppModel(store: try TerminalDeckStore(directory: root))
+        let reopened = AppModel(store: try DataStore(directory: root))
         try check(reopened.card(for: stale.ownerId) == nil && reopened.card(for: kept.ownerId) != nil,
                   "new App run drops disposable identity but keeps retained card")
         try check(reopened.engine.allRuntimes.isEmpty, "relaunch never resumes previous PTYs")
@@ -173,9 +173,9 @@ struct VerifyCardCopies {
     }
 
     /// Native mouse events, no Accessibility permission or global pointer movement required.
-    @MainActor static func workhorseGestureChecks() throws {
+    @MainActor static func splitGestureChecks() throws {
         NSApp.finishLaunching()
-        let (store, root) = try scratch("workhorse-gestures")
+        let (store, root) = try scratch("split-gestures")
         defer { try? FileManager.default.removeItem(at: root) }
         try store.save(PresetCard(id: "source", title: "Source", command: "echo READY"))
         let model = AppModel(store: store)
@@ -183,7 +183,7 @@ struct VerifyCardCopies {
         let source = OwnerKey(kind: .preset, ownerId: "source")
         model.createCopy(source)
         let copy = model.copyKeys.first!
-        model.enterWorkhorseMode()
+        model.enterSplitMode()
         // Keep earlier windows alive: closing an accessory app's last window can asynchronously
         // deactivate it after the next fixture has already requested activation.
         var windows: [NSWindow] = []
@@ -192,14 +192,14 @@ struct VerifyCardCopies {
             for key in [source, copy] {
                 // A fresh row isolates gesture routing from the panel's drag-preview animation.
                 let probe = GestureProbe()
-                let view = WorkhorseRow(model: model, kind: .preset, id: key.ownerId,
+                let view = SplitRow(model: model, kind: .preset, id: key.ownerId,
                                         title: model.card(for: key.ownerId)!.title, detail: "echo READY",
                                         selectedKey: nil, hoveredID: key.ownerId,
                                         onLongPress: { probe.lifted = true })
-                    .frame(width: width - 20, height: WorkhorseLayout.listRowHeight)
+                    .frame(width: width - 20, height: SplitLayout.listRowHeight)
                 let host = NSHostingView(rootView: view)
                 let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: width - 20,
-                                                          height: WorkhorseLayout.listRowHeight),
+                                                          height: SplitLayout.listRowHeight),
                                       styleMask: [.titled, .closable], backing: .buffered, defer: false)
                 window.isReleasedWhenClosed = false
                 window.contentView = host
@@ -306,15 +306,15 @@ struct VerifyCardCopies {
         model.startCard(model.card(for: "build")!)
         model.startCard(model.card(for: webCopy.ownerId)!)
         try wait("render fixture PTYs ready") { model.liveRuntime(webCopy)?.isReachable == true && model.liveRuntime(terminal)?.isReachable == true }
-        try render(DeckRootView(model: model), name: "card-copy-implementation-light", width: 1100, height: 860, dark: false)
-        try render(DeckRootView(model: model), name: "card-copy-implementation-dark", width: 1100, height: 860, dark: true)
+        try render(RootView(model: model), name: "card-copy-implementation-light", width: 1100, height: 860, dark: false)
+        try render(RootView(model: model), name: "card-copy-implementation-dark", width: 1100, height: 860, dark: true)
         model.setDisplayMode(.square, for: .preset)
-        try render(DeckRootView(model: model), name: "card-copy-implementation-square", width: 950, height: 700, dark: false)
-        model.enterWorkhorseMode()
-        model.setWorkhorseSidebarRatio(240.0/1100.0, persist: false)
+        try render(RootView(model: model), name: "card-copy-implementation-square", width: 950, height: 700, dark: false)
+        model.enterSplitMode()
+        model.setSidebarRatio(240.0/1100.0, persist: false)
         model.page = .detail(webCopy)
-        try render(DeckRootView(model: model), name: "card-copy-implementation-workhorse-narrow", width: 1100, height: 700, dark: false)
-        try render(DeckRootView(model: model), name: "card-copy-implementation-workhorse-night", width: 1100, height: 700, dark: true)
+        try render(RootView(model: model), name: "card-copy-implementation-split-narrow", width: 1100, height: 700, dark: false)
+        try render(RootView(model: model), name: "card-copy-implementation-split-night", width: 1100, height: 700, dark: true)
         try check(model.copyKeys.count == 2 && model.copyKeys.allSatisfy { $0.kind == .preset },
                   "layout changes preserve preset copies without creating terminal copies")
     }
@@ -323,8 +323,8 @@ struct VerifyCardCopies {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         if CommandLine.arguments.contains("--interactions") {
-            try workhorseGestureChecks()
-            print("ALL WORKHORSE GESTURE CHECKS PASSED")
+            try splitGestureChecks()
+            print("ALL SPLIT GESTURE CHECKS PASSED")
             return
         }
         try modelChecks()

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# AppModel/native SwiftUI checks in isolated temporary stores; never opens the user's deck.
+# AppModel/native SwiftUI checks in isolated temporary stores; never opens the user's data.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build --scratch-path .build-app --product RunBo
 build="$(swift build --scratch-path .build-app --show-bin-path)"
 objects=()
-for target in TerminalDeck TerminalDeckKit SwiftTerm; do
+for target in App Core SwiftTerm; do
   while IFS= read -r source; do
     base="$(basename "$source")"
     # Import the App's testable types, but don't link its real @main/AppDelegate lifecycle.
-    [[ "$base" == TerminalDeckApp.swift ]] && continue
+    [[ "$base" == AppEntry.swift ]] && continue
     objects+=("$build/$target.build/$base.o")
   done < "$build/$target.build/sources"
 done

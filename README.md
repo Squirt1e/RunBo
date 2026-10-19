@@ -4,7 +4,7 @@
 
 RunBo 不依赖云端服务。卡片、终端、会话元数据和历史都保存在本地；关闭窗口不会结束正在运行的终端，退出 App 时会统一收尾。
 
-![RunBo 工作台（界面示意，数据为虚构）](assets/runbo-home.png)
+![RunBo 工作台（界面示意，数据为虚构）](screenshots/runbo-home.png)
 
 ## 功能特性
 
@@ -13,7 +13,7 @@ RunBo 不依赖云端服务。卡片、终端、会话元数据和历史都保�
 - **终端菜单**：随时新建临时终端，查看连接状态；关闭主窗口后终端继续运行，可从菜单栏重新打开 App。
 - **会话历史**：按卡片保留最近两次完整会话，支持只读回放；历史只记录终端实际可见的字节流，不记录原始按键。
 - **卡片标签与分身**：标签用于分组；快捷指令可以创建一次性分身，复制启动配置但不复制历史或进程，也可保留为独立卡片。
-- **牛马模式（Workhorse）**：在同一份数据上提供双栏工作台视图，左侧是快捷指令和终端列表，右侧常驻当前终端详情；可在标准卡片界面与牛马模式之间即时切换。
+- **牛马模式（双栏工作台）**：在同一份数据上提供双栏工作台视图，左侧是快捷指令和终端列表，右侧常驻当前终端详情；可在标准卡片界面与牛马模式之间即时切换。
 - **快速导航**：`⌘K` 按名称、已保存命令或标签查找项目；`↑` `↓` 选择，回车打开，不执行终端命令。
 - **文件面板**：查看卡片工作目录，支持逐层浏览与只读预览；文本、图片、PDF 和 HTML 静态预览有明确的读取上限与安全限制，不修改源文件。
 - **本地优先**：没有账号系统、云同步或远程主机管理；终端链接只在明确点击时交给系统浏览器或默认应用。
@@ -22,7 +22,7 @@ RunBo 不依赖云端服务。卡片、终端、会话元数据和历史都保�
 
 | 终端详情 | 卡片模式 |
 | --- | --- |
-| ![终端详情（界面示意，数据为虚构）](assets/runbo-terminal.png) | ![卡片模式（界面示意，数据为虚构）](assets/runbo-cards.png) |
+| ![终端详情（界面示意，数据为虚构）](screenshots/runbo-terminal.png) | ![卡片模式（界面示意，数据为虚构）](screenshots/runbo-cards.png) |
 
 > 以上截图使用虚构数据，仅用于展示界面结构；实际界面以当前构建为准。
 
@@ -35,7 +35,7 @@ RunBo 不依赖云端服务。卡片、终端、会话元数据和历史都保�
 ## 构建与运行
 
 ```bash
-./scripts/build-app.sh            # release 构建，产出 build/RunBo.app
+./scripts/build-app.sh            # release 构建，产出 build/RunBo.app（名称来自 config/Info.plist）
 ./scripts/build-app.sh debug      # debug 构建（开发时用）
 open "build/RunBo.app"            # 启动
 ```
@@ -46,7 +46,7 @@ open "build/RunBo.app"            # 启动
 swift run --product RunBo
 ```
 
-底层构建脚本支持 `APP_OUTPUT_PATH=/absolute/path/RunBo.app` 指定输出位置，默认输出到 `build/RunBo.app`。
+底层构建脚本支持 `APP_OUTPUT_PATH=/absolute/path/RunBo.app` 指定输出位置，默认输出到 `build/RunBo.app`；输出名与可执行文件名从 `config/Info.plist` 读取。
 
 ### App 内的重建与重启
 
@@ -83,14 +83,16 @@ bash scripts/verify-file-browser.sh                             # 文件浏览�
 ## 项目结构
 
 ```text
-Sources/TerminalDeckKit/    核心模型、SQLite 存储、PTY、会话状态机与纯展示规则
-Sources/TerminalDeck/       SwiftUI + AppKit 应用、菜单栏、终端与文件预览
-Sources/TerminalDeckChecks/ 无 XCTest 依赖的自检 harness
-scripts/                    构建、重建/重启与各项验证脚本
-Resources/                  App 图标、菜单栏图标与 Info.plist
+config/Info.plist          App 身份：显示名、Bundle ID、版本、可执行文件名
+resources/                 打包用 App 图标与菜单栏图标源稿
+src/app/                   SwiftUI + AppKit 应用、菜单栏、终端、文件预览
+src/core/                  核心模型、SQLite 存储、PTY、会话状态机与规则
+src/checks/                无 XCTest 依赖的自检 harness
+scripts/                   构建、重建/重启与验证脚本
+screenshots/               README 界面截图
 ```
 
-工程名、SwiftPM 目标与模块仍为 `TerminalDeck`，对外 App 名为 `RunBo`，Bundle ID 为 `com.runbo.app`；仓库目录名 `terminal-card` 是历史名称。
+SwiftPM package 名为 `RunBo`，target / 模块为 `App`、`Core`、`Checks`。对外 App 名、可执行文件名与 Bundle ID 来自 `config/Info.plist`（当前为 `RunBo` / `RunBo` / `com.runbo.app`）；仓库目录名 `terminal-card` 是历史名称。
 
 ## 已知边界
 

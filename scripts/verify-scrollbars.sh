@@ -5,10 +5,10 @@ cd "$(dirname "$0")/.."
 swift build --scratch-path .build-app --product RunBo
 build="$(swift build --scratch-path .build-app --show-bin-path)"
 objects=()
-for target in TerminalDeck TerminalDeckKit SwiftTerm; do
+for target in App Core SwiftTerm; do
   while IFS= read -r source; do
     base="$(basename "$source")"
-    [[ "$base" == TerminalDeckApp.swift ]] && continue
+    [[ "$base" == AppEntry.swift ]] && continue
     objects+=("$build/$target.build/$base.o")
   done < "$build/$target.build/sources"
 done

@@ -3,8 +3,8 @@ import SwiftUI
 import WebKit
 import PDFKit
 import Network
-import TerminalDeckKit
-@testable import TerminalDeck
+import Core
+@testable import App
 
 @main
 struct VerifyFileBrowser {
@@ -50,7 +50,7 @@ struct VerifyFileBrowser {
         try fm.createDirectory(at: b, withIntermediateDirectories: true)
         try Data("source".utf8).write(to: a.appendingPathComponent("hello.swift"))
         try fm.createDirectory(at: a.appendingPathComponent("nested"), withIntermediateDirectories: true)
-        let store = try TerminalDeckStore(directory: root.appendingPathComponent("store"))
+        let store = try DataStore(directory: root.appendingPathComponent("store"))
         try store.save(PresetCard(id: "a", title: "A", command: "printf FILES_READY", workingDirectory: a.path))
         try store.save(PresetCard(id: "b", title: "B", command: "true", workingDirectory: b.path))
         let model = AppModel(store: store)
@@ -180,14 +180,14 @@ struct VerifyFileBrowser {
     }
 
     @MainActor static func eventChecks(_ root: URL) throws {
-        let store = try TerminalDeckStore(directory: root.appendingPathComponent("event-store"))
+        let store = try DataStore(directory: root.appendingPathComponent("event-store"))
         try store.save(PresetCard(id: "event", title: "File browser fixture", command: "echo fixture", workingDirectory: root.path))
         let model = AppModel(store: store)
         let key = OwnerKey(kind: .preset, ownerId: "event")
         model.page = .detail(key)
         var frames: [String: CGRect] = [:]
-        let rootView = host(DeckRootView(model: model)
-            .onPreferenceChange(WorkbenchControlFrameKey.self) { frames = $0 }, width: 1100, height: 860)
+        let rootView = host(RootView(model: model)
+            .onPreferenceChange(ControlFrameKey.self) { frames = $0 }, width: 1100, height: 860)
         let window = rootView.window!
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -223,8 +223,8 @@ struct VerifyFileBrowser {
                   "pinned panel exposes the 10pt resize divider between terminal and file panel")
         model.toggleFullscreen(key); pump(0.2)
         try check(browser.isPinned && browser.isVisible, "fullscreen keeps the explicit pin choice")
-        model.enterWorkhorseMode(); model.page = .detail(key); pump(0.3)
-        try check(browser.isPinned && browser.isVisible, "workhorse mode keeps the same pinned panel")
+        model.enterSplitMode(); model.page = .detail(key); pump(0.3)
+        try check(browser.isPinned && browser.isVisible, "split mode keeps the same pinned panel")
         let terminalTop = frames["terminal-panel"]!.minY
         model.createCopy(key)
         let copy = model.copyKeys.first!
@@ -238,10 +238,10 @@ struct VerifyFileBrowser {
         try check(!browser.isPinned && browser.isVisible && abs(frames["terminal-panel"]!.width - floatingTerminal.width) < 2,
                   "native unpin returns the same panel to floating without reserving terminal width")
         try check(abs(frames["file-browser-panel"]!.width - browser.panelWidth) < 1, "floating panel has the same preferred width")
-        model.exitWorkhorseMode(); model.page = .detail(key); pump(0.2)
+        model.exitSplitMode(); model.page = .detail(key); pump(0.2)
         let entry = card.listings[""]!.first { $0.name == "fixture.png" }!
         // Exercise the exact shared Escape dispatcher used by AppKit's local monitor.
-        func escape() { _ = model.consumeDeckEscape(); pump(0.15) }
+        func escape() { _ = model.consumeAppEscape(); pump(0.15) }
         if !model.isFullscreen(key) { model.toggleFullscreen(key) }
         browser.showPreview(entry, root: card.state.root)
         pump(0.3)
@@ -255,7 +255,7 @@ struct VerifyFileBrowser {
         model.beginRename(key)
         escape()
         try check(model.renamingKey == nil, "Escape still cancels title editing")
-        model.enterWorkhorseMode()
+        model.enterSplitMode()
         model.page = .detail(key)
         pump(0.3)
         try check(model.isFullscreen(key) && !browser.isVisible, "mode change preserves the explicit closed choice")
@@ -265,8 +265,8 @@ struct VerifyFileBrowser {
         if let index = CommandLine.arguments.firstIndex(of: "--render"), CommandLine.arguments.count > index + 1 {
             let directory = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            for (name, width, pinned, dark) in [("standard-floating", 1100.0, false, false), ("standard-pinned", 1100.0, true, false), ("narrow-pinned", 950.0, true, false), ("workhorse-floating-dark", 1100.0, false, true), ("workhorse-pinned-dark", 1100.0, true, true)] {
-                if dark { model.enterWorkhorseMode() } else { model.exitWorkhorseMode() }
+            for (name, width, pinned, dark) in [("standard-floating", 1100.0, false, false), ("standard-pinned", 1100.0, true, false), ("narrow-pinned", 950.0, true, false), ("split-floating-dark", 1100.0, false, true), ("split-pinned-dark", 1100.0, true, true)] {
+                if dark { model.enterSplitMode() } else { model.exitSplitMode() }
                 model.page = .detail(key)
                 window.setContentSize(NSSize(width: width, height: 860))
                 window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

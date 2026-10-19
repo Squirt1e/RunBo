@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Safe to invoke from a RunBo task: build separately, then hand off to launchd before quitting.
+# Safe to invoke from a task: build separately, then hand off to launchd before quitting.
 # --check builds and validates the package without scheduling a quit, replacement or launch.
 set -euo pipefail
 
@@ -17,15 +17,17 @@ for arg in "$@"; do
     esac
 done
 
+APP_NAME="$(/usr/bin/plutil -extract CFBundleName raw -o - "$ROOT/config/Info.plist")"
+BUNDLE_ID="$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$ROOT/config/Info.plist")"
 mkdir -p "$ROOT/build"
-WORK="$(mktemp -d "$ROOT/build/.runbo-rebuild.XXXXXX")"
+WORK="$(mktemp -d "$ROOT/build/.rebuild.XXXXXX")"
 KEEP_WORK=0
 cleanup() {
     if [[ "$KEEP_WORK" == 0 ]]; then rm -rf "$WORK"; fi
 }
 trap cleanup EXIT
-APP="$ROOT/build/RunBo.app"
-STAGED="$WORK/RunBo.app"
+APP="$ROOT/build/$APP_NAME.app"
+STAGED="$WORK/$APP_NAME.app"
 HELPER="$WORK/restart-built-app"
 RESULT="$WORK/result.json"
 
@@ -41,7 +43,7 @@ if [[ "$CHECK_ONLY" == 1 ]]; then
     exit 0
 fi
 
-LABEL="com.runbo.rebuild.$(/usr/bin/uuidgen | /usr/bin/tr '[:upper:]' '[:lower:]')"
+LABEL="$BUNDLE_ID.rebuild.$(/usr/bin/uuidgen | /usr/bin/tr '[:upper:]' '[:lower:]')"
 # A nohup child can still belong to the task's PTY process group. launchd owns this
 # worker instead, so normal App shutdown cannot kill the waiter or its relaunch.
 launchctl submit -l "$LABEL" -o "$WORK/restart.log" -e "$WORK/restart.err" -- \
@@ -52,5 +54,5 @@ launchctl submit -l "$LABEL" -o "$WORK/restart.log" -e "$WORK/restart.err" -- \
         exit "$status"
     ' sh "$HELPER" "$APP" "$STAGED" "$RESULT" "$LABEL"
 KEEP_WORK=1
-printf 'Restart scheduled: all RunBo terminals will end through normal App quit.\n'
+printf 'Restart scheduled: all terminals will end through normal App quit.\n'
 printf 'Job: %s\nResult: %s\nLog: %s\n' "$LABEL" "$RESULT" "$WORK/restart.log"
