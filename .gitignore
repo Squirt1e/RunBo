@@ -1,6 +1,9 @@
 openspec/
 design-preview/
 docs-private/
+.idea/
+.vscode/
+.swiftpm/
 .build/
 .build-app/
 .build-checks/
